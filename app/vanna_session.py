@@ -291,7 +291,7 @@ class Session:
                 "type": "function",
                 "function": {
                     "name": "analyse",
-                    "description": "Analyze the data in the database, return preview data (limit to 100 rows maximum)",
+                    "description": "Analyze the data in the database, return preview data (limit to 30 rows maximum)",
                     "parameters": {
                         "type": "object",
                         "properties": {
