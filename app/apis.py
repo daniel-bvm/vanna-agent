@@ -159,7 +159,7 @@ async def get_supported_db_types() -> list[str]:
     return list(db_models.keys())
 
 @api_router.get("/processing-url")
-def get_processing_url() -> str:
+def get_processing_url() -> dict:
     return {
         "url": f"http://localhost:12345/index.html",
         "status": "ready"
