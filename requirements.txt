@@ -1,0 +1,7 @@
+fastapi[standard]
+fastmcp
+pydantic
+json-repair
+pydantic-settings
+regex
+vanna[sqlite3,postgres,mysql,mssql,chromadb,openai]

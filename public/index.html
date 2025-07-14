@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Authorization</title>
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Connect your Database</h1>
+        </header>
+
+        <div class="form-container">
+            <!-- Database Type Selection -->
+            <div class="db-type-section">
+                <label for="db-type" class="form-label">Database Type</label>
+                <select id="db-type" class="form-select">
+                    <option value="">Select a database type...</option>
+                </select>
+            </div>
+
+            <!-- Dynamic Form Container -->
+            <div id="dynamic-form" class="dynamic-form-container" style="display: none;">
+                <form id="db-auth-form">
+                    <div id="form-fields"></div>
+                </form>
+            </div>
+
+            <!-- Connection Status and Switch -->
+            <div class="connection-section" style="display: none;" id="connection-section">
+                <div class="connection-status">
+                    <span id="connection-status-text">Disconnected</span>
+                    <div class="status-indicator" id="status-indicator"></div>
+                </div>
+
+                <div class="connection-switch">
+                    <label class="switch">
+                        <input type="checkbox" id="connection-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="switch-label">Connect to Database</span>
+                </div>
+            </div>
+
+            <!-- Loading and Error Messages -->
+            <div id="loading" class="message loading" style="display: none;">
+                <div class="spinner"></div>
+                <span>Loading...</span>
+            </div>
+
+            <div id="error-message" class="message error" style="display: none;"></div>
+            <div id="success-message" class="message success" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="js/index.js"></script>
+</body>
+
+</html>
