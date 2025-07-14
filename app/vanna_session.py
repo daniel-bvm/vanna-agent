@@ -22,7 +22,6 @@ from app.utils import sync2async, wrap_chunk, refine_chat_history, refine_mcp_re
 from app.oai_models import ChatCompletionRequest, ChatCompletionAdditionalParameters, ChatCompletionStreamResponse, ChatCompletionResponse, ErrorResponse, random_uuid
 from app.oai_streaming import ChatCompletionResponseBuilder, create_streaming_response
 from typing import Optional, AsyncGenerator, Generator, Callable
-import re
 import json
 import os
 from pandas import DataFrame
@@ -57,20 +56,25 @@ class Session:
     def construct_system_prompt(self):
         SYSTEM_PROMPT = 'You are Vanna Agent, a database master who can manage and query to extract information, insight from the database.'
 
-        if self.healthcheck():
+        schemas = self.get_schema()
+        if self.healthcheck() and schemas is not None:
             SYSTEM_PROMPT += "\nStatus: Connected"
             SYSTEM_PROMPT += "\nDatabase: " + self.auth.db_type
-            SYSTEM_PROMPT += "\nDatabase Schema: "
-            
-            schemas = self.get_schema()
-            
-            for schema in schemas:
-                # schema is a dataframe
-                SYSTEM_PROMPT += "\n" + schema.to_markdown()
+
+            if isinstance(schemas, DataFrame):
+                SYSTEM_PROMPT += "\nSchemas: "
+                unique_tables = schemas["table_name"].unique()
+
+                for table in unique_tables:
+                    filtered_schema = schemas[schemas["table_name"] == table]
+                    selected_columns = ["column_name", "data_type", "is_nullable"]
+                    
+                    SYSTEM_PROMPT += "\n\nTable: " + table
+                    SYSTEM_PROMPT += "\n" + filtered_schema[selected_columns].to_markdown()
 
         else:
-            SYSTEM_PROMPT += "\nStatus: Disconnected (no tools available)"
-
+            SYSTEM_PROMPT += "\nStatus: Disconnected (no actions available)"
+            
         return SYSTEM_PROMPT
         
     async def validate(self, auth: DatabaseAuth, timeout: int = 10) -> bool:
@@ -130,9 +134,9 @@ class Session:
         self.session_validated = False
         self.auth = None
         
-    def get_schema(self) -> list[DataFrame]:
+    def get_schema(self) -> Optional[DataFrame]:
         if not self.session_validated:
-            return []
+            return None
         
         user_created_tables = """
             SELECT table_name
@@ -172,7 +176,7 @@ class Session:
 
         else:
             logger.error("Unsupported database type")
-            return []
+            return None
 
         return self.vanna.run_sql(query)
 
@@ -217,8 +221,14 @@ class Session:
 
         return True
     
-    async def analyse(self, reason: str, sql: str, visualize: bool = True):
+    async def analyse(self, reason: str, sql: str, visualize: bool = True) -> str:
         df: DataFrame = await sync2async(self.vanna.run_sql)(sql)
+
+        result = df.head(30).to_markdown()
+        hidden_rows = len(df) - 30
+
+        if hidden_rows > 0:
+            result += f"\n... {hidden_rows} rows hidden"
 
         if visualize:
             plotly_code: str = await sync2async(self.vanna.generate_plotly_code)(
@@ -226,8 +236,12 @@ class Session:
                 sql=sql,
                 df_metadata=f"Running df.dtypes gives:\n {df.dtypes}",
             )
-            fig: plotly.graph_objs.Figure = await sync2async(self.vanna.get_plotly_figure)(plotly_code=plotly_code, df=df)
-            
+
+            fig: plotly.graph_objs.Figure = await sync2async(self.vanna.get_plotly_figure)(
+                plotly_code=plotly_code, 
+                df=df
+            )
+
             if IS_APP_SUPPORT_SVG:
                 img: bytes = await sync2async(fig.to_image)(format="svg")
                 b64: str = base64.b64encode(img).decode("utf-8")
@@ -237,10 +251,9 @@ class Session:
                 b64: str = base64.b64encode(img).decode("utf-8")
                 b64 = f"data:image/png;base64,{b64}"
 
-        return {
-            "df": df.head(100).to_json(orient="records"),
-            "svg": b64 if visualize else None
-        }
+            result += f"\n\nVisualization: <img src='{b64}'/>"
+            
+        return result
 
     async def handle_request(
         self,
@@ -337,6 +350,10 @@ class Session:
             messages.append(refine_assistant_message(completion.choices[0].message))
 
             for call in (completion.choices[0].message.tool_calls or []):
+                if event.is_set():
+                    logger.info(f"[toolcall] Event signal received, stopping the request")
+                    break
+
                 n_calls += 1
 
                 _id, _name, _args = call.id, call.function.name, call.function.arguments
@@ -348,7 +365,7 @@ class Session:
 
                 if not isinstance(_result, str):
                     try:
-                        _result = json.dumps(_result, indent=2)
+                        _result = json.dumps(_result)
                     except:
                         _result = str(_result)
 

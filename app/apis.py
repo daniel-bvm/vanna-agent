@@ -9,6 +9,8 @@ from app.db_models import (
     BigQueryAuth, 
     OracleAuth, 
     OtherDBAuth,
+    DBAuthorization,
+    DatabaseAuth,
     validate_db_auth
 )
 import logging
@@ -68,8 +70,7 @@ async def chat_completions(request: ChatCompletionRequest, original_request: Req
     generator = session.handle_request(request, event, additional_parameters)
     ttft, tps, n_tokens = 0, 0, 0
 
-    if request.stream:
-
+    if stream:
         async def to_bytes(gen: AsyncGenerator) -> AsyncGenerator[bytes, None]:
             nonlocal ttft, tps, n_tokens
 
@@ -120,14 +121,14 @@ async def connect(request: Request) -> ResponseMessage[str]:
 
     return ResponseMessage[str](result="connected", status=APIStatus.OK)
 
-@api_router.post("/v1/healthcheck")
-async def healthcheck() -> ResponseMessage[str]:
+@api_router.post("/v1/state")
+async def state() -> ResponseMessage[Optional[DatabaseAuth]]:
     session = get_singleton_session()
 
     if not session.session_validated:
-        return ResponseMessage[str](result="not connected", status=APIStatus.ERROR)
+        return ResponseMessage[Optional[DatabaseAuth]](result=None, status=APIStatus.ERROR)
 
-    return ResponseMessage[str](result="ok", status=APIStatus.OK)
+    return ResponseMessage[Optional[DatabaseAuth]](result=session.auth, status=APIStatus.OK)
 
 @api_router.post("/v1/disconnect")
 async def disconnect(request: Request):
@@ -160,6 +161,6 @@ async def get_supported_db_types() -> list[str]:
 @api_router.get("/processing-url")
 def get_processing_url() -> str:
     return {
-        "url": f"http://localhost:{settings.port}/index.html",
+        "url": f"http://localhost:12345/index.html",
         "status": "ready"
     }

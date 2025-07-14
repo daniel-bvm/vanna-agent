@@ -59,12 +59,79 @@ class DatabaseAuthForm {
 
             const supportedTypes = await response.json();
             this.populateDbTypeDropdown(supportedTypes);
+
+            // After loading supported types, check current state
+            await this.checkCurrentState();
+
             this.hideMessages();
 
         } catch (error) {
             this.showError(`Failed to load database types: ${error.message}`);
             console.error('Error loading database types:', error);
         }
+    }
+
+    async checkCurrentState() {
+        try {
+            const response = await fetch('./v1/state', {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                // If endpoint fails, assume no connection
+                return;
+            }
+
+            const data = await response.json();
+
+            // Check if there's an active connection - fix: status is lowercase 'ok'
+            if (data.status === 'ok' && data.result) {
+                const authData = data.result;
+                this.currentDbType = authData.db_type;
+                this.isConnected = true;
+
+                // Set the database type in the dropdown
+                this.dbTypeSelect.value = authData.db_type;
+
+                // Load schema and generate form
+                const schema = await this.fetchSchema(authData.db_type);
+                this.currentSchema = schema;
+                this.generateForm(schema);
+
+                // Populate form fields with current values
+                this.populateFormFields(authData);
+
+                // Update UI to show connected state
+                this.showForm();
+                this.connectionToggle.checked = true;
+                this.updateConnectionStatus(true);
+
+            }
+
+        } catch (error) {
+            // If checking state fails, just continue with normal flow
+            console.error('State check error:', error);
+        }
+    }
+
+    populateFormFields(authData) {
+        // Populate form fields with existing connection data
+        Object.entries(authData).forEach(([key, value]) => {
+            if (key === 'db_type') return; // Skip db_type as it's already set
+
+            const input = document.getElementById(key);
+            if (input && value !== undefined && value !== null) {
+                if (input.type === 'number') {
+                    input.value = value.toString();
+                } else if (input.type === 'checkbox') {
+                    input.checked = value;
+                } else if (input.classList.contains('form-textarea')) {
+                    input.value = typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
+                } else {
+                    input.value = value;
+                }
+            }
+        });
     }
 
     populateDbTypeDropdown(supportedTypes) {
@@ -229,7 +296,7 @@ class DatabaseAuthForm {
             return;
         }
 
-        this.showLoading('Connecting to database...');
+        this.showLoading('Connecting...');
 
         try {
             const formData = this.getFormData();
@@ -259,7 +326,7 @@ class DatabaseAuthForm {
     }
 
     async disconnectDatabase() {
-        this.showLoading('Disconnecting from database...');
+        this.showLoading('Disconnecting...');
 
         try {
             const response = await fetch('./v1/disconnect', {
