@@ -71,10 +71,24 @@ class Session:
                     
                     SYSTEM_PROMPT += "\n\nTable: " + table
                     SYSTEM_PROMPT += "\n" + filtered_schema[selected_columns].to_markdown()
+                    
+                if len(unique_tables) == 0:
+                    SYSTEM_PROMPT += "\nNo schemas found"
+                    
+                else:
+                    SYSTEM_PROMPT += """\nCRITICAL RULES:
+1. ALWAYS use table names in your SQL queries
+2. NEVER write column names without table prefixes when multiple tables are involved
+3. Use proper table aliases (e.g., o for orders, p for products)
+4. Always specify the table name before the column name: table_name.column_name
+5. Use JOINs with explicit table names and conditions
+6. When aggregating data, always specify which table the data comes from
+7. always copy the exact source rendering when referencing a resource, either responding to user or messaging to other agents. For instance, use the precise format: <img src="{{src-id}}"/> (for images).
+"""
 
         else:
             SYSTEM_PROMPT += "\nStatus: Disconnected (no actions available)"
-            
+
         return SYSTEM_PROMPT
         
     async def validate(self, auth: DatabaseAuth, timeout: int = 10) -> bool:
@@ -222,7 +236,10 @@ class Session:
         return True
     
     async def analyse(self, reason: str, sql: str, visualize: bool = True) -> str:
-        df: DataFrame = await sync2async(self.vanna.run_sql)(sql)
+        try:
+            df: DataFrame = await sync2async(self.vanna.run_sql)(sql)
+        except Exception as e:
+            return f"Error: {e}"
 
         result = df.head(30).to_markdown()
         hidden_rows = len(df) - 30
@@ -251,7 +268,7 @@ class Session:
                 b64: str = base64.b64encode(img).decode("utf-8")
                 b64 = f"data:image/png;base64,{b64}"
 
-            result += f"\n\nVisualization: <img src='{b64}'/>"
+            result += f'\n\nVisualization:\n<img src="{b64}" alt="{reason}"/>'
             
         return result
 
@@ -360,8 +377,10 @@ class Session:
                 _args: dict = json.loads(_args)
             
                 yield wrap_chunk(random_uuid(), f"<action>Executing **{_name}**!</action>\n<details>\n<summary>Arguments:</summary>\n```json\n{json.dumps(_args, indent=2)}\n```\n</details>", "assistant")
-                _result = refine_mcp_response(await execute_toolcall(_name, _args), arm)
-                yield wrap_chunk(random_uuid(), f"<details>\n<summary>Result:</summary>\n```json\n{json.dumps(_result, indent=2)}\n```\n</details>", "assistant")
+                _result = await execute_toolcall(_name, _args)
+                yield wrap_chunk(random_uuid(), f"<details>\n<summary>Result:</summary>\n\n{_result}\n\n</details>", "assistant")
+
+                _result = refine_mcp_response(_result, arm)
 
                 if not isinstance(_result, str):
                     try:
