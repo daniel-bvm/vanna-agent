@@ -357,11 +357,11 @@ class Session:
                 tools=toolcalls,
                 tool_choice="auto",
                 model=settings.llm_model_id,
-                **(
-                    additional_parameters.model_dump() 
-                    if additional_parameters and 'api.openai.com' not in settings.llm_base_url 
-                    else {}
-                )
+                # **(
+                #     additional_parameters.model_dump() 
+                #     if additional_parameters and 'api.openai.com' not in settings.llm_base_url 
+                #     else {}
+                # )
             )
 
             if not requires_toolcall:
