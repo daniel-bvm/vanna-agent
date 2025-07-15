@@ -283,7 +283,7 @@ class Session:
                     b64: str = base64.b64encode(img).decode("utf-8")
                     b64 = f"data:image/png;base64,{b64}"
 
-                result += f'\n\nVisualization:\n<img src="{b64}" alt="{reason}"/>'
+                result += f'\n\nVisualization:\n<img src="{b64}"/>'
 
             except Exception as e:
                 logger.error(f"Error generating visualization: {e}", exc_info=True)
