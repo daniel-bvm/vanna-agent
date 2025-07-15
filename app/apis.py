@@ -74,19 +74,22 @@ async def chat_completions(request: ChatCompletionRequest, original_request: Req
         async def to_bytes(gen: AsyncGenerator) -> AsyncGenerator[bytes, None]:
             nonlocal ttft, tps, n_tokens
 
-            async for chunk in gen:
-                current_time = time.time()
+            try:
+                async for chunk in gen:
+                    current_time = time.time()
 
-                n_tokens += 1
-                ttft = min(ttft, current_time - enqueued)
-                tps = n_tokens / (current_time - enqueued)
+                    n_tokens += 1
+                    ttft = min(ttft, current_time - enqueued)
+                    tps = n_tokens / (current_time - enqueued)
 
-                if isinstance(chunk, ChatCompletionStreamResponse):
-                    data = chunk.model_dump_json()
-                    yield "data: " + data + "\n\n"
+                    if isinstance(chunk, ChatCompletionStreamResponse):
+                        data = chunk.model_dump_json()
+                        yield "data: " + data + "\n\n"
 
-            logger.info(f"Request {request_id} - TTFT: {ttft:.2f}s, TPS: {tps:.2f} tokens/s")
-            yield "data: [DONE]\n\n"
+                logger.info(f"Request {request_id} - TTFT: {ttft:.2f}s, TPS: {tps:.2f} tokens/s")
+
+            finally:
+                yield "data: [DONE]\n\n"
 
         return StreamingResponse(to_bytes(generator), media_type="text/event-stream")
     
