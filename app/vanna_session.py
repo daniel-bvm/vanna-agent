@@ -328,7 +328,7 @@ class Session:
                                 "default": True
                             }
                         },
-                        "required": ["sql"]
+                        "required": ["reason", "sql"]
                     }
                 }
             }
