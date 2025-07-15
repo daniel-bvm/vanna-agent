@@ -67,7 +67,7 @@ class Session:
 
                 for table in unique_tables:
                     filtered_schema = schemas[schemas["table_name"] == table]
-                    selected_columns = ["column_name", "data_type", "is_nullable"]
+                    selected_columns = ["column_name", "data_type"]
                     
                     SYSTEM_PROMPT += "\n\nTable: " + table
                     SYSTEM_PROMPT += "\n" + filtered_schema[selected_columns].to_markdown()
@@ -152,41 +152,50 @@ class Session:
         if not self.session_validated:
             return None
         
-        user_created_tables = """
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
-        """
         
         if isinstance(self.auth, PostgresAuth):
             query = f"""
-                SELECT *
+                SELECT table_name, column_name, data_type
                 FROM information_schema.columns
-                WHERE table_name IN ({user_created_tables})
+                WHERE table_name IN (
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_type = 'BASE TABLE'
+                )
             """
 
         elif isinstance(self.auth, MSSQLAuth):
             query = f"""
-                SELECT *
+                SELECT table_name, column_name, data_type
                 FROM information_schema.columns
-                WHERE table_name IN ({user_created_tables})
+                WHERE table_name IN (
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_type = 'BASE TABLE'
+                    AND table_schema = 'dbo'
+                )
             """
 
         elif isinstance(self.auth, MySQLAuth):
             query = f"""
-                SELECT *
+                SELECT TABLE_NAME as table_name, COLUMN_NAME as column_name, DATA_TYPE as data_type
                 FROM information_schema.columns
-                WHERE table_name IN ({user_created_tables})
+                WHERE table_name IN (
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE 
+                        table_type = 'BASE TABLE'
+                )
             """
 
-        elif isinstance(self.auth, SQLiteAuth):
-            query = f"""
-                SELECT *
-                FROM sqlite_master
-                WHERE type = 'table'
-                AND name IN ({user_created_tables})
-            """
+        # elif isinstance(self.auth, SQLiteAuth):
+        #     query = f"""
+        #         SELECT *
+        #         FROM sqlite_master
+        #         WHERE type = 'table'
+        #         AND name IN ({user_created_tables})
+        #     """
 
         else:
             logger.error("Unsupported database type")
