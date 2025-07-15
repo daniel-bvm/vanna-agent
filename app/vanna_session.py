@@ -246,11 +246,16 @@ class Session:
     
     async def analyse(self, reason: str, sql: str, visualize: bool = True) -> str:
         try:
-            df: DataFrame = await sync2async(self.vanna.run_sql)(sql)
+            df: Optional[DataFrame] = await sync2async(self.vanna.run_sql)(sql)
         except Exception as e:
             return f"Error: {e}"
 
-        result = df.head(30).to_markdown()
+        if df is not None:
+            result = df.head(30).to_markdown()
+
+        else:
+            return "Query returned an empty result"
+
         hidden_rows = len(df) - 30
 
         if hidden_rows > 0:
