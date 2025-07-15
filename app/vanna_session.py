@@ -76,7 +76,8 @@ class Session:
                     SYSTEM_PROMPT += "\nNo schemas found"
                     
                 else:
-                    SYSTEM_PROMPT += """\nCRITICAL RULES:
+                    SYSTEM_PROMPT += f"""\nCRITICAL RULES:
+0. The most important: write correct SQL for {self.auth.db_type} database.
 1. ALWAYS use table names in your SQL queries
 2. NEVER write column names without table prefixes when multiple tables are involved
 3. Use proper table aliases (e.g., o for orders, p for products)
@@ -288,6 +289,8 @@ class Session:
             except Exception as e:
                 logger.error(f"Error generating visualization: {e}", exc_info=True)
                 result += "\n\nNo visualization generated due to a system error"
+                result += "\nHere is the insight of the query result:\n"
+                result += df.describe().to_markdown()
 
         return result
 
@@ -310,7 +313,7 @@ class Session:
                 "type": "function",
                 "function": {
                     "name": "analyse",
-                    "description": "Analyze the data in the database, return preview data (limit to 30 rows maximum)",
+                    "description": "Execute the query and return the result",
                     "parameters": {
                         "type": "object",
                         "properties": {
