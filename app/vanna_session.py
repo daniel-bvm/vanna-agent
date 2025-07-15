@@ -256,29 +256,34 @@ class Session:
         if hidden_rows > 0:
             result += f"\n... {hidden_rows} rows hidden"
 
-        if visualize:
-            plotly_code: str = await sync2async(self.vanna.generate_plotly_code)(
-                question=reason,
-                sql=sql,
-                df_metadata=f"Running df.dtypes gives:\n {df.dtypes}",
-            )
+        if visualize and len(df) > 0:
+            try:
+                plotly_code: str = await sync2async(self.vanna.generate_plotly_code)(
+                    question=reason,
+                    sql=sql,
+                    df_metadata=f"Running df.dtypes gives:\n {df.dtypes}",
+                )
 
-            fig: plotly.graph_objs.Figure = await sync2async(self.vanna.get_plotly_figure)(
-                plotly_code=plotly_code, 
-                df=df
-            )
+                fig: plotly.graph_objs.Figure = await sync2async(self.vanna.get_plotly_figure)(
+                    plotly_code=plotly_code, 
+                    df=df
+                )
 
-            if IS_APP_SUPPORT_SVG:
-                img: bytes = await sync2async(fig.to_image)(format="svg")
-                b64: str = base64.b64encode(img).decode("utf-8")
-                b64 = f"data:image/svg+xml;base64,{b64}"
-            else:
-                img: str = fig.to_image(format="png")
-                b64: str = base64.b64encode(img).decode("utf-8")
-                b64 = f"data:image/png;base64,{b64}"
+                if IS_APP_SUPPORT_SVG:
+                    img: bytes = await sync2async(fig.to_image)(format="svg")
+                    b64: str = base64.b64encode(img).decode("utf-8")
+                    b64 = f"data:image/svg+xml;base64,{b64}"
+                else:
+                    img: str = fig.to_image(format="png")
+                    b64: str = base64.b64encode(img).decode("utf-8")
+                    b64 = f"data:image/png;base64,{b64}"
 
-            result += f'\n\nVisualization:\n<img src="{b64}" alt="{reason}"/>'
-            
+                result += f'\n\nVisualization:\n<img src="{b64}" alt="{reason}"/>'
+
+            except Exception as e:
+                logger.error(f"Error generating visualization: {e}")
+                result += "\n\nNo visualization generated due to a system error"
+
         return result
 
     async def handle_request(
