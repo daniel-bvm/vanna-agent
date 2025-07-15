@@ -29,6 +29,7 @@ from pandas import DataFrame
 import base64
 import plotly
 import regex
+from app.utils import strip_markers
 
 logger = logging.getLogger(__name__) 
 
@@ -202,8 +203,8 @@ class Session:
 
         schemas = self.fmt_schema()
         if schemas is not None:
-            SYSTEM_PROMPT += "\nStatus: Connected"
-            SYSTEM_PROMPT += "\nDatabase: " + self.auth.db_type
+            SYSTEM_PROMPT += "\nDatabase Status: Connected"
+            SYSTEM_PROMPT += "\nDatabase Type: " + self.auth.db_type
 
             if isinstance(schemas, str):
                 SYSTEM_PROMPT += "\nSchemas: "
@@ -225,7 +226,7 @@ class Session:
 """
 
         else:
-            SYSTEM_PROMPT += "\nStatus: Disconnected (no actions available)"
+            SYSTEM_PROMPT += "\nDatabase Status: not connected"
 
         return SYSTEM_PROMPT
         
@@ -395,16 +396,27 @@ class Session:
 
         while True and step < max_steps:
             response: str = await sync2async(self.vanna.submit_prompt)(
-                COT_TEMPLATE.format(
-                    user_request=question, 
-                    schema=db_schema,
-                    context=[
-                        {
-                            "subquestion": e['subquestion'], 
-                            "sql": e['sql'], 
-                            "summary": e.get("summary", None)
-                        } for e in SCRATCHPAD
-                    ] if len(SCRATCHPAD) > 0 else "None yet."
+                [
+                    self.vanna.user_message(
+                        COT_TEMPLATE.format(
+                            user_request=question, 
+                            schema=db_schema,
+                            context=[
+                                {
+                                    "subquestion": e['subquestion'], 
+                                    "sql": e['sql'], 
+                                    "summary": e.get("summary", None)
+                                } for e in SCRATCHPAD
+                            ] if len(SCRATCHPAD) > 0 else "None yet."
+                        )
+                    )
+                ]
+            )
+
+            response = strip_markers(
+                response, 
+                (
+                    ("think", False),
                 )
             )
 
@@ -587,7 +599,7 @@ class Session:
             
             return f"Tool {tool_name} not found!"
 
-        async def handoff(tool_name: str, tool_args: dict[str, Any]) -> AsyncGenerator[ChatCompletionStreamResponse | ChatCompletionResponse, None]:
+        async def handoff(tool_name: str, tool_args: dict[str, Any]) -> AsyncGenerator[ChatCompletionStreamResponse | ErrorResponse, None]:
             if tool_name == "cot_analyse":
                 async for chunk in self.cot_analyse(tool_args["question"]):
                     yield chunk
@@ -653,13 +665,13 @@ class Session:
                 yield wrap_chunk(random_uuid(), f"<action>Analyzing...</action>", "assistant")
 
                 async for chunk in handoff(_name, _args):
-                    if regex.search(r"<details>.*<\/details>", chunk.choices[0].message.content or "") is None:
+                    if regex.search(r"<details>.*<\/details>", chunk.choices[0].delta.content or "") is None:
                         yield chunk
 
                     if isinstance(chunk, ErrorResponse):
                         raise Exception(chunk.message)
                     
-                    _result += chunk.choices[0].message.content or ""
+                    _result += chunk.choices[0].delta.content or ""
 
                 _result = refine_mcp_response(_result, arm)
 
