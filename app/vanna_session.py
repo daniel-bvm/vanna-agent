@@ -28,6 +28,7 @@ import os
 from pandas import DataFrame
 import base64
 import plotly
+import regex
 
 logger = logging.getLogger(__name__) 
 
@@ -109,6 +110,8 @@ def summarize_dataframe(df: DataFrame) -> str:
         lines.append(f"  - Range: {df[col].min()} → {df[col].max()}")
 
     return "\n".join(lines)
+
+STOP_ANALYZING_MESSAGE = "I've tried my best to find useful information, but I couldn't find any."
 
 REPORT_GEN_PROMPT = """
 User Question:
@@ -477,7 +480,7 @@ class Session:
             toolcall_result += "\n\nInsights:\n" + summarize_dataframe(concatenated_df)
 
         else:
-            toolcall_result = "I've tried my best to find useful information, but I couldn't find any."
+            toolcall_result = STOP_ANALYZING_MESSAGE
             
             if len(VALID_SCRATCHPAD) > 0:
                 toolcall_result += "\n\nHere are the queries I tried:\n"
@@ -632,8 +635,11 @@ class Session:
 
             completion = await completion_builder.build()
             messages.append(refine_assistant_message(completion.choices[0].message))
+            has_success_toolcall = False
+            
+            toolcalls_requested = (completion.choices[0].message.tool_calls or [])
 
-            for call in (completion.choices[0].message.tool_calls or []):
+            for call_idx, call in enumerate(toolcalls_requested):
                 if event.is_set():
                     logger.info(f"[toolcall] Event signal received, stopping the request")
                     break
@@ -645,12 +651,14 @@ class Session:
                 _result = ""
 
                 yield wrap_chunk(random_uuid(), f"<action>Analyzing...</action>", "assistant")
+
                 async for chunk in handoff(_name, _args):
-                    yield chunk
+                    if regex.search(r"<details>.*<\/details>", chunk.choices[0].message.content or "") is None:
+                        yield chunk
 
                     if isinstance(chunk, ErrorResponse):
                         raise Exception(chunk.message)
-
+                    
                     _result += chunk.choices[0].message.content or ""
 
                 _result = refine_mcp_response(_result, arm)
@@ -661,6 +669,11 @@ class Session:
                     except:
                         _result = str(_result)
 
+                has_success_toolcall = has_success_toolcall or STOP_ANALYZING_MESSAGE not in _result
+
+                if has_success_toolcall and call_idx == len(toolcalls_requested) - 1:
+                    _result += "\n\n" + REPORT_EXTEND_PROMPT
+
                 messages.append(
                     {
                         "role": "tool",
@@ -669,7 +682,7 @@ class Session:
                     }
                 )
 
-            finished = len((completion.choices[0].message.tool_calls or [])) == 0
+            finished = len(toolcalls_requested) == 0
 
         os.makedirs("logs", exist_ok=True)
         with open(f"logs/messages-{request.request_id}.json", "w") as f:
