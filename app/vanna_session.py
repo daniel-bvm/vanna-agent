@@ -281,7 +281,7 @@ class Session:
                 result += f'\n\nVisualization:\n<img src="{b64}" alt="{reason}"/>'
 
             except Exception as e:
-                logger.error(f"Error generating visualization: {e}")
+                logger.error(f"Error generating visualization: {e}", exc_info=True)
                 result += "\n\nNo visualization generated due to a system error"
 
         return result
